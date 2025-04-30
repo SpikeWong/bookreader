@@ -1,68 +1,125 @@
 // src/utils/fileParser.js
 const fs = require('fs').promises;
-const EPub = require('epub');
+const path = require('path');
+const epub = require('epub');
 const pdf = require('pdf-parse');
 
-exports.parseBook = async (filePath) => {
-  const extension = filePath.split('.').pop().toLowerCase();
-  
-  switch (extension) {
-    case 'epub':
-      return parseEpub(filePath);
-    case 'pdf':
-      return parsePdf(filePath);
-    case 'txt':
-      return parseTxt(filePath);
-    default:
-      throw new Error('Unsupported file format');
+/**
+ * Extract content and calculate word count from various file types
+ * @param {string} filePath - Path to the file
+ * @param {string} fileType - Type of file (pdf, epub, txt, html)
+ * @returns {Promise<Object>} - Object with content and wordCount
+ */
+exports.extractContent = async (filePath, fileType) => {
+  try {
+    switch (fileType.toLowerCase()) {
+      case 'pdf':
+        return await extractFromPDF(filePath);
+      case 'epub':
+        return await extractFromEPUB(filePath);
+      case 'txt':
+        return await extractFromTXT(filePath);
+      case 'html':
+        return await extractFromHTML(filePath);
+      default:
+        throw new Error(`Unsupported file type: ${fileType}`);
+    }
+  } catch (error) {
+    console.error(`Error extracting content from ${fileType} file:`, error);
+    throw error;
   }
 };
 
-async function parseEpub(filePath) {
-  return new Promise((resolve, reject) => {
-    const epub = new EPub(filePath);
+/**
+ * Extract content from PDF file
+ */
+async function extractFromPDF(filePath) {
+  try {
+    const dataBuffer = await fs.readFile(filePath);
+    const data = await pdf(dataBuffer);
+    const content = data.text;
+    const wordCount = countWords(content);
     
-    epub.on('end', async () => {
-      try {
-        let content = '';
-        const chapters = await new Promise((res) => epub.getChapters((chapters) => res(chapters)));
-        
-        for (const chapter of chapters) {
-          content += await new Promise((res) => epub.getChapter(chapter.id, (err, text) => res(text)));
+    return { content, wordCount };
+  } catch (error) {
+    console.error('Error extracting from PDF:', error);
+    throw error;
+  }
+}
+
+/**
+ * Extract content from EPUB file
+ */
+async function extractFromEPUB(filePath) {
+  return new Promise((resolve, reject) => {
+    const epubBook = new epub(filePath);
+    let content = '';
+    
+    epubBook.on('end', () => {
+      // Get the chapters
+      epubBook.flow.forEach((chapter) => {
+        if (chapter.id) {
+          epubBook.getChapter(chapter.id, (err, text) => {
+            if (err) {
+              console.error('Error reading chapter:', err);
+            } else {
+              content += text;
+            }
+          });
         }
-
-        resolve({
-          title: epub.metadata.title,
-          author: epub.metadata.creator,
-          content: content.replace(/<[^>]*>/g, ' ')
-        });
-      } catch (error) {
-        reject(error);
-      }
+      });
+      
+      // Wait a bit to ensure all chapters are processed
+      setTimeout(() => {
+        const wordCount = countWords(content);
+        resolve({ content, wordCount });
+      }, 1000);
     });
-
-    epub.parse();
+    
+    epubBook.on('error', reject);
+    epubBook.parse();
   });
 }
 
-async function parsePdf(filePath) {
-  const dataBuffer = await fs.readFile(filePath);
-  const data = await pdf(dataBuffer);
-  
-  return {
-    title: '', // PDF metadata extraction would go here
-    author: '',
-    content: data.text
-  };
+/**
+ * Extract content from TXT file
+ */
+async function extractFromTXT(filePath) {
+  try {
+    const content = await fs.readFile(filePath, 'utf8');
+    const wordCount = countWords(content);
+    
+    return { content, wordCount };
+  } catch (error) {
+    console.error('Error extracting from TXT:', error);
+    throw error;
+  }
 }
 
-async function parseTxt(filePath) {
-  const content = await fs.readFile(filePath, 'utf-8');
-  const filename = filePath.split('/').pop().replace('.txt', '');
+/**
+ * Extract content from HTML file
+ */
+async function extractFromHTML(filePath) {
+  try {
+    const content = await fs.readFile(filePath, 'utf8');
+    // Remove HTML tags to get plain text
+    const plainText = content.replace(/<[^>]*>/g, ' ');
+    const wordCount = countWords(plainText);
+    
+    return { content: plainText, wordCount };
+  } catch (error) {
+    console.error('Error extracting from HTML:', error);
+    throw error;
+  }
+}
+
+/**
+ * Count words in a text
+ */
+function countWords(text) {
+  if (!text) return 0;
   
-  return {
-    title: filename,
-    author: 'Unknown',
-    content
-  };
+  // Remove extra whitespace and split by spaces
+  const words = text.trim().split(/\s+/);
+  return words.filter(word => word.length > 0).length;
 }

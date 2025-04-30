@@ -1,61 +1,60 @@
 // ../react_template/src/utils/api.js
-// Mock API implementation for frontend demo purposes
-const MOCK_ENABLED = true; // Set to true to use mock API functions
+// Real API implementation
 const API_URL = 'http://localhost:3000/api';
 
-// Store books in localStorage to persist data between page refreshes
-const initMockStorage = () => {
-  if (!localStorage.getItem('mockBooks')) {
-    localStorage.setItem('mockBooks', JSON.stringify([]));
+/**
+ * Handle API responses and errors consistently
+ * @param {Response} response - Fetch API response
+ * @returns {Promise<any>} - Parsed JSON response or throws error
+ */
+const handleResponse = async (response) => {
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.error || 'An error occurred');
   }
+  
+  return data;
 };
 
-// Mock login function
-const mockLogin = async (username, password) => {
-  // For demo purposes, always return a mock token
-  return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6InNwaWtlV2FuZyIsInJvbGUiOiJhZG1pbiJ9';
+/**
+ * Get authentication token from local storage
+ */
+const getAuthToken = () => localStorage.getItem('token');
+
+/**
+ * Set authentication headers if token exists
+ */
+const getAuthHeaders = () => {
+  const token = getAuthToken();
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
 };
 
-// Mock upload function
-const mockUploadBook = async (formData) => {
-  // Create a mock book entry
-  const file = formData.get('book');
-  if (!file) throw new Error('No file provided');
-  
-  const books = JSON.parse(localStorage.getItem('mockBooks') || '[]');
-  const newId = books.length > 0 ? Math.max(...books.map(b => b.id)) + 1 : 1;
-  
-  const fileNameParts = file.name.split('.');
-  const fileExt = fileNameParts.pop().toLowerCase();
-  const fileName = fileNameParts.join('.');
-  
-  // Create a new book object
-  const newBook = {
-    id: newId,
-    title: fileName,
-    author: 'Unknown Author',
-    coverImage: 'https://via.placeholder.com/400x600/E2E8F0/1A202C?text=' + encodeURIComponent(fileName),
-    fileType: fileExt,
-    addedAt: new Date().toISOString(),
-    description: `This is a ${fileExt.toUpperCase()} book uploaded by the admin.`,
-    wordCount: Math.floor(Math.random() * 50000) + 10000,
-    progress: 0
-  };
-  
-  books.push(newBook);
-  localStorage.setItem('mockBooks', JSON.stringify(books));
-  
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 1500));
-  
-  return newBook;
+/**
+ * Register a new user
+ * @param {string} username - Username
+ * @param {string} email - Email address
+ * @param {string} password - Password
+ */
+export const register = async (username, email, password) => {
+  const response = await fetch(`${API_URL}/auth/register`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ username, email, password }),
+  });
+
+  return handleResponse(response);
 };
 
+/**
+ * Login user and get token
+ * @param {string} username - Username or email
+ * @param {string} password - Password
+ * @returns {Promise<string>} - JWT token
+ */
 export const login = async (username, password) => {
-  if (MOCK_ENABLED) {
-    return mockLogin(username, password);
-  }
-  
   const response = await fetch(`${API_URL}/auth/login`, {
     method: 'POST',
     headers: {
@@ -64,107 +63,231 @@ export const login = async (username, password) => {
     body: JSON.stringify({ username, password }),
   });
 
-  if (!response.ok) {
-    throw new Error('Login failed');
-  }
-
-  const data = await response.json();
+  const data = await handleResponse(response);
+  localStorage.setItem('token', data.token);
   return data.token;
 };
 
+/**
+ * Get current logged-in user
+ * @returns {Promise<Object>} - User object
+ */
+export const getCurrentUser = async () => {
+  const response = await fetch(`${API_URL}/auth/me`, {
+    headers: {
+      ...getAuthHeaders(),
+    },
+  });
+
+  return handleResponse(response);
+};
+
+/**
+ * Update user profile
+ * @param {Object} profileData - Profile data to update
+ * @returns {Promise<Object>} - Updated user data
+ */
+export const updateProfile = async (profileData) => {
+  const response = await fetch(`${API_URL}/auth/profile`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(profileData),
+  });
+
+  return handleResponse(response);
+};
+
+/**
+ * Upload a new book
+ * @param {FormData} formData - Form data with book file and metadata
+ * @returns {Promise<Object>} - Uploaded book data
+ */
 export const uploadBook = async (formData) => {
-  if (MOCK_ENABLED) {
-    initMockStorage();
-    return mockUploadBook(formData);
-  }
-  
-  const token = localStorage.getItem('token');
-  const response = await fetch(`${API_URL}/books/upload`, {
+  const response = await fetch(`${API_URL}/books`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      ...getAuthHeaders(),
     },
     body: formData,
   });
 
-  if (!response.ok) {
-    throw new Error('Upload failed');
-  }
-
-  return await response.json();
+  return handleResponse(response);
 };
 
-// Mock get all books function
-const mockGetAllBooks = async () => {
-  initMockStorage();
-  const books = JSON.parse(localStorage.getItem('mockBooks') || '[]');
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 300));
-  return books;
-};
-
-// Mock get book by id function
-const mockGetBookById = async (id) => {
-  initMockStorage();
-  const books = JSON.parse(localStorage.getItem('mockBooks') || '[]');
-  const book = books.find(b => b.id === parseInt(id, 10));
-  if (!book) {
-    throw new Error('Book not found');
-  }
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 300));
-  return book;
-};
-
-// Mock delete book function
-const mockDeleteBook = async (id) => {
-  initMockStorage();
-  const books = JSON.parse(localStorage.getItem('mockBooks') || '[]');
-  const filteredBooks = books.filter(b => b.id !== parseInt(id, 10));
-  localStorage.setItem('mockBooks', JSON.stringify(filteredBooks));
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  return true;
-};
-
+/**
+ * Get all books
+ * @returns {Promise<Array>} - List of books
+ */
 export const getAllBooks = async () => {
-  if (MOCK_ENABLED) {
-    return mockGetAllBooks();
-  }
-  
   const response = await fetch(`${API_URL}/books`);
-  if (!response.ok) {
-    throw new Error('Failed to fetch books');
-  }
-  return await response.json();
+  return handleResponse(response);
 };
 
+/**
+ * Get a specific book by ID
+ * @param {string} id - Book ID
+ * @returns {Promise<Object>} - Book data
+ */
 export const getBookById = async (id) => {
-  if (MOCK_ENABLED) {
-    return mockGetBookById(id);
-  }
+  const response = await fetch(`${API_URL}/books/${id}`, {
+    headers: {
+      ...getAuthHeaders(), // Include token if available for progress
+    },
+  });
   
-  const response = await fetch(`${API_URL}/books/${id}`);
-  if (!response.ok) {
-    throw new Error('Failed to fetch book');
-  }
-  return await response.json();
+  return handleResponse(response);
 };
 
+/**
+ * Update book details
+ * @param {string} id - Book ID
+ * @param {Object} bookData - Book data to update
+ * @returns {Promise<Object>} - Updated book data
+ */
+export const updateBook = async (id, bookData) => {
+  const response = await fetch(`${API_URL}/books/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(bookData),
+  });
+
+  return handleResponse(response);
+};
+
+/**
+ * Delete a book
+ * @param {string} id - Book ID
+ * @returns {Promise<Object>} - Success message
+ */
 export const deleteBook = async (id) => {
-  if (MOCK_ENABLED) {
-    return mockDeleteBook(id);
-  }
-  
-  const token = localStorage.getItem('token');
   const response = await fetch(`${API_URL}/books/${id}`, {
     method: 'DELETE',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      ...getAuthHeaders(),
     },
   });
 
-  if (!response.ok) {
-    throw new Error('Delete failed');
-  }
+  return handleResponse(response);
+};
+
+/**
+ * Get user's bookshelf
+ * @returns {Promise<Array>} - List of books in user's bookshelf
+ */
+export const getUserBookshelf = async () => {
+  const response = await fetch(`${API_URL}/bookshelf`, {
+    headers: {
+      ...getAuthHeaders(),
+    },
+  });
+
+  return handleResponse(response);
+};
+
+/**
+ * Get user's favorite books
+ * @returns {Promise<Array>} - List of favorite books
+ */
+export const getFavoriteBooks = async () => {
+  const response = await fetch(`${API_URL}/bookshelf/favorites`, {
+    headers: {
+      ...getAuthHeaders(),
+    },
+  });
+
+  return handleResponse(response);
+};
+
+/**
+ * Add book to user's bookshelf
+ * @param {Object} bookshelfData - Bookshelf entry data
+ * @returns {Promise<Object>} - Added bookshelf entry
+ */
+export const addToBookshelf = async (bookshelfData) => {
+  const response = await fetch(`${API_URL}/bookshelf`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(bookshelfData),
+  });
+
+  return handleResponse(response);
+};
+
+/**
+ * Update reading progress for a book
+ * @param {string} bookId - Book ID
+ * @param {number} progress - Reading progress (0-100)
+ * @returns {Promise<Object>} - Updated progress data
+ */
+export const updateProgress = async (bookId, progress) => {
+  const response = await fetch(`${API_URL}/bookshelf/${bookId}/progress`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({ progress }),
+  });
+
+  return handleResponse(response);
+};
+
+/**
+ * Toggle favorite status for a book
+ * @param {string} bookId - Book ID
+ * @returns {Promise<Object>} - Updated favorite status
+ */
+export const toggleFavorite = async (bookId) => {
+  const response = await fetch(`${API_URL}/bookshelf/${bookId}/favorite`, {
+    method: 'PUT',
+    headers: {
+      ...getAuthHeaders(),
+    },
+  });
+
+  return handleResponse(response);
+};
+
+/**
+ * Update notes for a book
+ * @param {string} bookId - Book ID
+ * @param {string} notes - Notes text
+ * @returns {Promise<Object>} - Updated notes data
+ */
+export const updateNotes = async (bookId, notes) => {
+  const response = await fetch(`${API_URL}/bookshelf/${bookId}/notes`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({ notes }),
+  });
+
+  return handleResponse(response);
+};
+
+/**
+ * Remove a book from the user's bookshelf
+ * @param {string} bookId - Book ID
+ * @returns {Promise<Object>} - Success message
+ */
+export const removeFromBookshelf = async (bookId) => {
+  const response = await fetch(`${API_URL}/bookshelf/${bookId}`, {
+    method: 'DELETE',
+    headers: {
+      ...getAuthHeaders(),
+    },
+  });
+
+  return handleResponse(response);
 };
