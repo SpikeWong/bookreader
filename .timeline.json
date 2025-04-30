@@ -1,3 +1,22 @@
 {
-  "timeline_index": 1
+  "timeline_index": 3,
+  "planner": {},
+  "gallery_last_file": {},
+  "timeline_status": {
+    "2": 0,
+    "3": 1
+  },
+  "preview_servers": {
+    "fd1db35b-aad7-4eae-91b9-ddb0b67a2b0d": {
+      "role": "Alex",
+      "port": 5173,
+      "subdomain": "english-book-reader-ok6jrd-pc75q-7a2b0d",
+      "server": "52e4afb5-4eeb-498e-b072-c7a741314c34",
+      "cmd": "cd /data/chats/pc75q/workspace/react_template && pnpm i && pnpm run dev",
+      "timeline_index": 2,
+      "status": "success",
+      "logs": []
+    }
+  },
+  "deploy": {}
 }
